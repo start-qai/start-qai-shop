@@ -1,0 +1,7 @@
+dist
+node_modules
+*.tsbuildinfo
+apps/frontend/public
+apps/backend/prisma/migrations
+apps/backend/prisma/dev.db
+package-lock.json

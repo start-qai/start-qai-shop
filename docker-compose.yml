@@ -1,0 +1,35 @@
+# QAI Shop – uruchomienie całości (frontend + backend + baza SQLite) jednym poleceniem:
+#   docker compose up --build
+# Frontend: http://localhost:5173   |   API+Swagger: http://localhost:4000/docs
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    environment:
+      PORT: "4000"
+      # Baza SQLite na wolumenie (osobny katalog data/, by nie przykryć schema.prisma).
+      DATABASE_URL: "file:/app/apps/backend/data/dev.db"
+      FRONTEND_ORIGIN: "http://localhost:5173"
+      DEMO_AUTH_TOKEN: "qai-shop-demo-token-2026"
+      DEMO_USERNAME: "demo"
+      DEMO_PASSWORD: "demo123"
+    ports:
+      - "4000:4000"
+    volumes:
+      - backend-db:/app/apps/backend/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      args:
+        VITE_API_URL: "http://localhost:4000"
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  backend-db:
