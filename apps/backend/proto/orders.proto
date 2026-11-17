@@ -1,0 +1,83 @@
+// OrderService – gRPC API for internal systems (warehouse, courier).
+// Orders are created by the REST checkout (POST /api/checkout); gRPC reads them and moves them
+// through the lifecycle PAID -> SHIPPED -> DELIVERED.
+//
+// Auth: metadata `authorization: Bearer <token>` (same demo token as the REST API).
+// Server reflection is enabled, e.g.: grpcurl -plaintext localhost:50051 list
+syntax = "proto3";
+
+package qaishop.orders.v1;
+
+service OrderService {
+  // Returns a single order by id.
+  rpc GetOrder(GetOrderRequest) returns (Order);
+  // Returns all orders, newest first. Optional filter by status.
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+  // Moves an order one step forward: PAID -> SHIPPED -> DELIVERED.
+  rpc UpdateOrderStatus(UpdateOrderStatusRequest) returns (Order);
+  // Streams the current status and every subsequent change; closes after DELIVERED.
+  rpc WatchOrder(WatchOrderRequest) returns (stream OrderStatusEvent);
+}
+
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  ORDER_STATUS_PAID = 1;
+  ORDER_STATUS_SHIPPED = 2;
+  ORDER_STATUS_DELIVERED = 3;
+}
+
+message OrderItem {
+  string product_id = 1;
+  string title = 2;
+  int32 quantity = 3;
+  double price = 4;
+  double line_total = 5;
+}
+
+message Order {
+  string id = 1;
+  OrderStatus status = 2;
+  repeated OrderItem items = 3;
+  int32 total_items = 4;
+  double total_price = 5;
+  // Always "PLN".
+  string currency = 6;
+  // Empty for ORDER_STATUS_PAID.
+  string tracking_number = 7;
+  // ISO 8601.
+  string created_at = 8;
+  // ISO 8601.
+  string updated_at = 9;
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message ListOrdersRequest {
+  // ORDER_STATUS_UNSPECIFIED = no filter.
+  OrderStatus status = 1;
+}
+
+message ListOrdersResponse {
+  repeated Order orders = 1;
+}
+
+message UpdateOrderStatusRequest {
+  string order_id = 1;
+  OrderStatus status = 2;
+  // Required only for ORDER_STATUS_SHIPPED (max 64 characters after trimming).
+  string tracking_number = 3;
+}
+
+message WatchOrderRequest {
+  string order_id = 1;
+}
+
+message OrderStatusEvent {
+  string order_id = 1;
+  OrderStatus status = 2;
+  string tracking_number = 3;
+  // ISO 8601.
+  string changed_at = 4;
+}

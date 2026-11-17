@@ -25,8 +25,12 @@ checkoutRouter.post(
         throw HttpError.badRequest("Nie można sfinalizować zakupu – koszyk jest pusty");
       }
 
+      // A freshly created order has updatedAt equal to createdAt.
+      const now = new Date();
       const order = await tx.order.create({
         data: {
+          createdAt: now,
+          updatedAt: now,
           status: "PAID",
           totalPrice: cart.totalPrice,
           currency: cart.currency,

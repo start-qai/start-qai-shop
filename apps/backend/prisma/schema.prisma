@@ -35,10 +35,15 @@ model CartItem {
 }
 
 model Order {
-  id         String   @id @default(cuid())
-  status     String   @default("PAID")
-  totalPrice Float
-  currency   String   @default("PLN")
-  itemsJson  String
-  createdAt  DateTime @default(now())
+  id             String   @id @default(cuid())
+  /// PAID | SHIPPED | DELIVERED (gRPC: ORDER_STATUS_*)
+  status         String   @default("PAID")
+  totalPrice     Float
+  currency       String   @default("PLN")
+  /// Snapshot of the cart items at checkout time.
+  itemsJson      String
+  trackingNumber String?
+  createdAt      DateTime @default(now())
+  /// @default(now()) lets `prisma db push` add the column to an existing database without data loss.
+  updatedAt      DateTime @default(now()) @updatedAt
 }

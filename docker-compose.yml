@@ -1,6 +1,6 @@
 # QAI Shop – uruchomienie całości (frontend + backend + baza SQLite) jednym poleceniem:
 #   docker compose up --build
-# Frontend: http://localhost:5173   |   API+Swagger: http://localhost:4000/docs
+# Frontend: http://localhost:5173   |   API+Swagger: http://localhost:4000/docs   |   gRPC: localhost:50051
 
 services:
   backend:
@@ -9,6 +9,8 @@ services:
       dockerfile: apps/backend/Dockerfile
     environment:
       PORT: "4000"
+      # gRPC OrderService (reflection włączone): grpcurl -plaintext localhost:50051 list
+      GRPC_PORT: "50051"
       # Baza SQLite na wolumenie (osobny katalog data/, by nie przykryć schema.prisma).
       DATABASE_URL: "file:/app/apps/backend/data/dev.db"
       FRONTEND_ORIGIN: "http://localhost:5173"
@@ -17,6 +19,7 @@ services:
       DEMO_PASSWORD: "demo123"
     ports:
       - "4000:4000"
+      - "50051:50051"
     volumes:
       - backend-db:/app/apps/backend/data
 
