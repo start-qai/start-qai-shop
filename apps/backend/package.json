@@ -15,6 +15,9 @@
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.3.0",
+    "@grpc/grpc-js": "^1.14.7",
+    "@grpc/proto-loader": "^0.7.15",
+    "@grpc/reflection": "^1.0.4",
     "@prisma/client": "^5.22.0",
     "@qai-shop/shared": "*",
     "cors": "^2.8.5",

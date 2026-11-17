@@ -14,13 +14,13 @@ Docker Compose lub ręcznie przez `npm`.
 
 ## Stack
 
-| Warstwa  | Technologie                                                       |
-| -------- | ----------------------------------------------------------------- |
-| Frontend | React 18, Vite, React Router, TypeScript                          |
-| Backend  | Express 4, Zod (walidacja), Swagger UI (OpenAPI), TypeScript, tsx |
-| Baza     | SQLite + Prisma ORM (ten sam silnik w obu trybach uruchomienia)   |
-| Współdz. | `@qai-shop/shared` – wspólne typy, schematy Zod, stałe, dane seed |
-| Testy    | Vitest, Supertest (API), React Testing Library                    |
+| Warstwa  | Technologie                                                                               |
+| -------- | ----------------------------------------------------------------------------------------- |
+| Frontend | React 18, Vite, React Router, TypeScript                                                  |
+| Backend  | Express 4, Zod (walidacja), Swagger UI (OpenAPI), gRPC (`@grpc/grpc-js`), TypeScript, tsx |
+| Baza     | SQLite + Prisma ORM (ten sam silnik w obu trybach uruchomienia)                           |
+| Współdz. | `@qai-shop/shared` – wspólne typy, schematy Zod, stałe, dane seed                         |
+| Testy    | Vitest, Supertest (API), React Testing Library                                            |
 
 ## Struktura projektu
 
@@ -52,6 +52,7 @@ Po starcie:
 | Frontend (sklep)           | http://localhost:5173      |
 | API                        | http://localhost:4000/api  |
 | Swagger (dokumentacja API) | http://localhost:4000/docs |
+| gRPC (OrderService)        | localhost:50051            |
 
 Baza SQLite jest tworzona i **seedowana automatycznie** przy pierwszym starcie kontenera
 backendu (skrypt `docker-entrypoint.sh`). Dane trwają na wolumenie `backend-db`.
@@ -146,6 +147,69 @@ curl -s http://localhost:4000/api/products \
 
 ---
 
+## gRPC API – OrderService
+
+Obok REST API backend udostępnia usługę **gRPC** dla systemów wewnętrznych (magazyn, kurier).
+Zamówienie powstaje przez REST (`POST /api/checkout`), a dalej jest obsługiwane przez gRPC.
+
+| Parametr    | Wartość                                                              |
+| ----------- | -------------------------------------------------------------------- |
+| Adres       | `localhost:50051` (bez TLS / plaintext)                              |
+| Kontrakt    | [`apps/backend/proto/orders.proto`](apps/backend/proto/orders.proto) |
+| Usługa      | `qaishop.orders.v1.OrderService`                                     |
+| Autoryzacja | metadata `authorization: Bearer qai-shop-demo-token-2026`            |
+| Reflection  | włączone (`grpcurl`, Postman, Insomnia działają bez pliku proto)     |
+
+| RPC                 | Typ              | Opis                                                              |
+| ------------------- | ---------------- | ----------------------------------------------------------------- |
+| `GetOrder`          | unary            | Szczegóły zamówienia                                              |
+| `ListOrders`        | unary            | Lista zamówień (od najnowszego), opcjonalny filtr po statusie     |
+| `UpdateOrderStatus` | unary            | Zmiana statusu: `PAID → SHIPPED → DELIVERED`                      |
+| `WatchOrder`        | server streaming | Bieżący status i kolejne zmiany; stream kończy się po `DELIVERED` |
+
+Statusy w gRPC: `ORDER_STATUS_PAID`, `ORDER_STATUS_SHIPPED`, `ORDER_STATUS_DELIVERED`
+(w bazie i REST: `PAID`, `SHIPPED`, `DELIVERED`). Zmiana na `ORDER_STATUS_SHIPPED` wymaga
+pola `tracking_number`.
+
+Seed tworzy trzy zamówienia: `order-paid-1`, `order-shipped-1`, `order-delivered-1`.
+Restart backendu (`docker compose restart backend` lub `npm run seed`) przywraca je do stanu początkowego.
+
+### Szybki test przez grpcurl
+
+```bash
+# Lista usług (reflection)
+grpcurl -plaintext localhost:50051 list
+
+# Opis usługi
+grpcurl -plaintext localhost:50051 describe qaishop.orders.v1.OrderService
+
+# Szczegóły zamówienia (-emit-defaults pokazuje także pola z wartością domyślną)
+grpcurl -plaintext -emit-defaults \
+  -H 'authorization: Bearer qai-shop-demo-token-2026' \
+  -d '{"order_id":"order-paid-1"}' \
+  localhost:50051 qaishop.orders.v1.OrderService/GetOrder
+
+# Lista zamówień w statusie SHIPPED
+grpcurl -plaintext -H 'authorization: Bearer qai-shop-demo-token-2026' \
+  -d '{"status":"ORDER_STATUS_SHIPPED"}' \
+  localhost:50051 qaishop.orders.v1.OrderService/ListOrders
+
+# Wysyłka zamówienia
+grpcurl -plaintext -H 'authorization: Bearer qai-shop-demo-token-2026' \
+  -d '{"order_id":"order-paid-1","status":"ORDER_STATUS_SHIPPED","tracking_number":"PL-TRACK-1234"}' \
+  localhost:50051 qaishop.orders.v1.OrderService/UpdateOrderStatus
+
+# Śledzenie zmian statusu (stream; w drugim terminalu zmień status)
+grpcurl -plaintext -H 'authorization: Bearer qai-shop-demo-token-2026' \
+  -d '{"order_id":"order-paid-1"}' \
+  localhost:50051 qaishop.orders.v1.OrderService/WatchOrder
+```
+
+> Instalacja grpcurl: `brew install grpcurl` (macOS), binarki dla Windows/Linux:
+> https://github.com/fullstorydev/grpcurl/releases
+
+---
+
 ## Testy
 
 ```bash
@@ -169,6 +233,7 @@ Wzór: `.env.example` (w katalogu głównym repozytorium) – skopiuj do `apps/b
 | Zmienna           | Domyślnie                  | Opis                          |
 | ----------------- | -------------------------- | ----------------------------- |
 | `PORT`            | `4000`                     | Port API                      |
+| `GRPC_PORT`       | `50051`                    | Port serwera gRPC             |
 | `DATABASE_URL`    | `file:./prisma/dev.db`     | Ścieżka do bazy SQLite        |
 | `FRONTEND_ORIGIN` | `http://localhost:5173`    | Dozwolony origin CORS         |
 | `DEMO_AUTH_TOKEN` | `qai-shop-demo-token-2026` | Token zwracany po zalogowaniu |
@@ -195,13 +260,13 @@ Docker Compose or manually via `npm`.
 
 ## Stack
 
-| Layer    | Technologies                                                       |
-| -------- | ------------------------------------------------------------------ |
-| Frontend | React 18, Vite, React Router, TypeScript                           |
-| Backend  | Express 4, Zod (validation), Swagger UI (OpenAPI), TypeScript, tsx |
-| Database | SQLite + Prisma ORM (same engine in both run modes)                |
-| Shared   | `@qai-shop/shared` – shared types, Zod schemas, constants, seed    |
-| Tests    | Vitest, Supertest (API), React Testing Library                     |
+| Layer    | Technologies                                                                               |
+| -------- | ------------------------------------------------------------------------------------------ |
+| Frontend | React 18, Vite, React Router, TypeScript                                                   |
+| Backend  | Express 4, Zod (validation), Swagger UI (OpenAPI), gRPC (`@grpc/grpc-js`), TypeScript, tsx |
+| Database | SQLite + Prisma ORM (same engine in both run modes)                                        |
+| Shared   | `@qai-shop/shared` – shared types, Zod schemas, constants, seed                            |
+| Tests    | Vitest, Supertest (API), React Testing Library                                             |
 
 ## Project structure
 
@@ -228,11 +293,12 @@ docker compose up --build
 
 After startup:
 
-| Service            | URL                        |
-| ------------------ | -------------------------- |
-| Frontend (shop)    | http://localhost:5173      |
-| API                | http://localhost:4000/api  |
-| Swagger (API docs) | http://localhost:4000/docs |
+| Service             | URL                        |
+| ------------------- | -------------------------- |
+| Frontend (shop)     | http://localhost:5173      |
+| API                 | http://localhost:4000/api  |
+| Swagger (API docs)  | http://localhost:4000/docs |
+| gRPC (OrderService) | localhost:50051            |
 
 The SQLite database is created and **seeded automatically** on the first start of the
 backend container (`docker-entrypoint.sh` script). Data persists on the `backend-db` volume.
@@ -327,6 +393,48 @@ curl -s http://localhost:4000/api/products \
 
 ---
 
+## gRPC API – OrderService
+
+Next to the REST API, the backend exposes a **gRPC** service for internal systems (warehouse, courier).
+An order is created via REST (`POST /api/checkout`) and then handled via gRPC.
+
+| Parameter  | Value                                                                |
+| ---------- | -------------------------------------------------------------------- |
+| Address    | `localhost:50051` (no TLS / plaintext)                               |
+| Contract   | [`apps/backend/proto/orders.proto`](apps/backend/proto/orders.proto) |
+| Service    | `qaishop.orders.v1.OrderService`                                     |
+| Auth       | metadata `authorization: Bearer qai-shop-demo-token-2026`            |
+| Reflection | enabled (`grpcurl`, Postman, Insomnia work without the proto file)   |
+
+| RPC                 | Type             | Description                                                   |
+| ------------------- | ---------------- | ------------------------------------------------------------- |
+| `GetOrder`          | unary            | Order details                                                 |
+| `ListOrders`        | unary            | Order list (newest first), optional status filter             |
+| `UpdateOrderStatus` | unary            | Status change: `PAID → SHIPPED → DELIVERED`                   |
+| `WatchOrder`        | server streaming | Current status and subsequent changes; ends after `DELIVERED` |
+
+gRPC statuses: `ORDER_STATUS_PAID`, `ORDER_STATUS_SHIPPED`, `ORDER_STATUS_DELIVERED`
+(database and REST: `PAID`, `SHIPPED`, `DELIVERED`). Moving to `ORDER_STATUS_SHIPPED` requires
+the `tracking_number` field.
+
+The seed creates three orders: `order-paid-1`, `order-shipped-1`, `order-delivered-1`.
+Restarting the backend (`docker compose restart backend` or `npm run seed`) restores their initial state.
+
+### Quick test via grpcurl
+
+```bash
+grpcurl -plaintext localhost:50051 list
+
+grpcurl -plaintext -emit-defaults \
+  -H 'authorization: Bearer qai-shop-demo-token-2026' \
+  -d '{"order_id":"order-paid-1"}' \
+  localhost:50051 qaishop.orders.v1.OrderService/GetOrder
+```
+
+More examples are in the Polish section above.
+
+---
+
 ## Tests
 
 ```bash
@@ -350,6 +458,7 @@ Template: `.env.example` (in the repository root) – copy it to `apps/backend/.
 | Variable          | Default                    | Description                 |
 | ----------------- | -------------------------- | --------------------------- |
 | `PORT`            | `4000`                     | API port                    |
+| `GRPC_PORT`       | `50051`                    | gRPC server port            |
 | `DATABASE_URL`    | `file:./prisma/dev.db`     | Path to the SQLite database |
 | `FRONTEND_ORIGIN` | `http://localhost:5173`    | Allowed CORS origin         |
 | `DEMO_AUTH_TOKEN` | `qai-shop-demo-token-2026` | Token returned after login  |

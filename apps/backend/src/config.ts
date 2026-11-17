@@ -5,6 +5,9 @@ loadEnv();
 
 export const config = {
   port: Number(process.env.PORT ?? 4000),
+  /** gRPC server (OrderService). Bound on all interfaces so it is reachable from outside Docker. */
+  grpcPort: Number(process.env.GRPC_PORT ?? 50051),
+  grpcHost: process.env.GRPC_HOST ?? "0.0.0.0",
   databaseUrl: process.env.DATABASE_URL ?? "file:./prisma/dev.db",
   authToken: process.env.DEMO_AUTH_TOKEN ?? DEMO_AUTH_TOKEN,
   credentials: {

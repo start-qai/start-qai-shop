@@ -1,27 +1,17 @@
 import type { Request, Response, NextFunction } from "express";
 import { AUTH_HEADER } from "@qai-shop/shared";
-import { config } from "../config.js";
 import { HttpError } from "../lib/http-error.js";
+import { AUTH_MESSAGES, checkBearer } from "../lib/auth-token.js";
 
 /**
  * Authorization middleware – SIMULATED (training).
- * The scheme name ("Bearer") is matched case-insensitively (per RFC 7235/6750).
  * Only a single hardcoded token (config.authToken) is accepted => anything else => 401.
+ * The token check itself lives in lib/auth-token.ts (shared with the gRPC server).
  */
 export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
-  const header = req.headers[AUTH_HEADER];
-
-  const match = typeof header === "string" ? /^Bearer\s+(.+)$/i.exec(header.trim()) : null;
-
-  if (!match) {
-    throw HttpError.unauthorized("Brak nagłówka Authorization: Bearer <token>");
+  const result = checkBearer(req.headers[AUTH_HEADER]);
+  if (result !== "ok") {
+    throw HttpError.unauthorized(AUTH_MESSAGES[result]);
   }
-
-  const token = match[1].trim();
-
-  if (token !== config.authToken) {
-    throw HttpError.unauthorized("Nieprawidłowy token autoryzacyjny");
-  }
-
   next();
 }
